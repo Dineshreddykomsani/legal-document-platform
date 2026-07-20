@@ -12,7 +12,8 @@ import type {
   RiskAnalysisResponse,
 } from "./types";
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/legal";
+export const API_BASE_URL = import.meta.env.VITE_API_URL;
+export const API_BASE = `${API_BASE_URL.replace(/\/$/, "")}/api/legal`;
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
