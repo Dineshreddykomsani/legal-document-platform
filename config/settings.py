@@ -102,6 +102,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 CORS_ALLOWED_ORIGINS = [
     "https://legal-document-platform.vercel.app",
+    "https://legal-document-platform-ebsbrn3uj-dineshreddykomsanis-projects.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
