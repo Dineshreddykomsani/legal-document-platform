@@ -24,10 +24,12 @@ from apps.legal.services.pdf_service import PDFService
 
 
 class DocumentTemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = DocumentTemplate.objects.filter(is_active=True)
     serializer_class = DocumentTemplateSerializer
     filterset_fields = ["document_type"]
     search_fields = ["name", "description"]
+
+    def get_queryset(self):
+        return DocumentTemplate.objects.filter(is_active=True)
 
 
 class LegalDocumentViewSet(viewsets.ModelViewSet):

@@ -95,13 +95,13 @@ ALLOWED_HOSTS = [
     ).split(",")
     if host.strip()
 ]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https?://localhost:\d+$",
+    r"^https?://127\.0\.0\.1:\d+$",
+]
+
 CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,https://legal-document-platform.vercel.app"
-    ).split(",")
-    if origin.strip()
+    "https://legal-document-platform.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True

@@ -6,7 +6,8 @@ from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from apps.legal.models import DocumentVersion, LegalDocument
+from apps.legal.models import DocumentTemplate, DocumentVersion, LegalDocument
+from apps.legal.seed_data import seed_default_document_templates
 
 
 class LegalDocumentApiTests(TestCase):
@@ -35,6 +36,47 @@ class LegalDocumentApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(LegalDocument.objects.count(), 1)
         self.assertEqual(DocumentVersion.objects.count(), 1)
+
+    def test_templates_endpoint_returns_default_templates(self):
+        response = self.client.get("/api/legal/templates/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 4)
+        self.assertEqual(
+            {template["name"] for template in response.data["results"]},
+            {
+                "Employment Letter",
+                "Offer Letter",
+                "Mutual Non-Disclosure Agreement",
+                "Service Agreement",
+            },
+        )
+
+    def test_seed_command_only_inserts_missing_templates(self):
+        nda = DocumentTemplate.objects.get(document_type="nda")
+        nda.name = "Custom NDA"
+        nda.save(update_fields=["name"])
+
+        call_command("seed_legal_templates")
+
+        nda.refresh_from_db()
+        self.assertEqual(DocumentTemplate.objects.count(), 4)
+        self.assertEqual(nda.name, "Custom NDA")
+
+    def test_seed_helper_recreates_missing_templates_idempotently(self):
+        DocumentTemplate.objects.all().delete()
+
+        created_count = seed_default_document_templates()
+
+        self.assertEqual(created_count, 4)
+        self.assertEqual(DocumentTemplate.objects.count(), 4)
+        self.assertTrue(DocumentTemplate.objects.filter(document_type="nda").exists())
+
+    def test_templates_endpoint_allows_vite_dev_origin(self):
+        response = self.client.get("/api/legal/templates/", HTTP_ORIGIN="http://127.0.0.1:5173")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "http://127.0.0.1:5173")
 
     def test_update_document_creates_new_version_when_content_changes(self):
         document = LegalDocument.objects.create(title="Draft", document_type="nda", content="Old", status="draft")
