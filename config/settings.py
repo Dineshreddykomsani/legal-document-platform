@@ -104,10 +104,14 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 CORS_ALLOWED_ORIGINS = [
     "https://legal-document-platform.vercel.app",
-    "https://legal-document-platform-ebsbrn3uj-dineshreddykomsanis-projects.vercel.app",
+    "https://legal-document-platform-6jr6ujkxj-dineshreddykomsanis-projects.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [
+    "https://legal-document-platform.vercel.app",
+    "https://legal-document-platform-6jr6ujkxj-dineshreddykomsanis-projects.vercel.app",
+]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
