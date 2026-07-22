@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+
 from django.http import HttpResponse
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.pagination import PageNumberPagination
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, NotFound, ValidationError
@@ -23,8 +27,13 @@ from apps.legal.services.document_service import DocumentService
 from apps.legal.services.pdf_service import PDFService
 
 
+class TemplatePagination(PageNumberPagination):
+    page_size = 100
+
+
 class DocumentTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DocumentTemplateSerializer
+    pagination_class = TemplatePagination
     filterset_fields = ["document_type"]
     search_fields = ["name", "description"]
 
@@ -34,6 +43,7 @@ class DocumentTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 
 class LegalDocumentViewSet(viewsets.ModelViewSet):
     queryset = DocumentService.list_documents()
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     filterset_fields = ["document_type", "status"]
     search_fields = ["title", "content"]
     ordering_fields = ["created_at", "updated_at", "title"]
@@ -66,7 +76,9 @@ class LegalDocumentViewSet(viewsets.ModelViewSet):
         data = {
             "title": request.data.get("title", document.title),
             "document_type": request.data.get("document_type", document.document_type),
+            "template": request.data.get("template", document.template_id),
             "content": request.data.get("content", document.content),
+            "branding": request.data.get("branding", document.branding),
             "status": request.data.get("status", document.status),
         }
         serializer = self.get_serializer(document, data=data)
@@ -76,7 +88,15 @@ class LegalDocumentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="generate")
     def generate(self, request):
-        serializer = GenerateDocumentSerializer(data=request.data)
+        data = request.data.dict() if hasattr(request.data, "dict") else dict(request.data)
+        for key in ("fields", "branding"):
+            if isinstance(data.get(key), str):
+                try:
+                    data[key] = json.loads(data[key])
+                except json.JSONDecodeError as exc:
+                    raise ValidationError({key: "Must be a valid JSON object."}) from exc
+
+        serializer = GenerateDocumentSerializer(data=data)
         serializer.is_valid(raise_exception=True)
         try:
             generated = DocumentService.generate_document(**serializer.validated_data)
@@ -90,6 +110,7 @@ class LegalDocumentViewSet(viewsets.ModelViewSet):
             "document_type": generated.document_type,
             "content": generated.content,
             "document": LegalDocumentDetailSerializer(generated.document).data if generated.document else None,
+            "pdf_url": self.reverse_action("download-pdf", args=[generated.document.id]) if generated.document else None,
         }
         return Response(payload, status=status.HTTP_201_CREATED if generated.document else status.HTTP_200_OK)
 

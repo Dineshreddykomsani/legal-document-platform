@@ -27,11 +27,23 @@ class DocumentService:
 
     @staticmethod
     @transaction.atomic
-    def create_document(*, title: str, document_type: str, content: str, status: str = DocumentStatus.DRAFT) -> LegalDocument:
+    def create_document(
+        *,
+        title: str,
+        document_type: str,
+        content: str,
+        status: str = DocumentStatus.DRAFT,
+        template: DocumentTemplate | None = None,
+        branding: dict | None = None,
+        company_logo=None,
+    ) -> LegalDocument:
         document = LegalDocument.objects.create(
             title=title,
             document_type=document_type,
+            template=template,
             content=content,
+            branding=branding or {},
+            company_logo=company_logo,
             status=status,
         )
         DocumentService._create_version(document)
@@ -39,21 +51,60 @@ class DocumentService:
 
     @staticmethod
     @transaction.atomic
-    def update_document(document: LegalDocument, *, title: str, document_type: str, content: str, status: str) -> LegalDocument:
+    def update_document(
+        document: LegalDocument,
+        *,
+        title: str,
+        document_type: str,
+        content: str,
+        status: str,
+        template: DocumentTemplate | None = None,
+        branding: dict | None = None,
+        company_logo=None,
+    ) -> LegalDocument:
         content_changed = document.content != content
         document.title = title
         document.document_type = document_type
+        if template is not None:
+            document.template = template
         document.content = content
+        if branding is not None:
+            document.branding = branding
+        if company_logo:
+            document.company_logo = company_logo
         document.status = status
-        document.save(update_fields=["title", "document_type", "content", "status", "updated_at"])
+        document.save(
+            update_fields=[
+                "title",
+                "document_type",
+                "template",
+                "content",
+                "branding",
+                "company_logo",
+                "status",
+                "updated_at",
+            ]
+        )
         if content_changed:
             DocumentService._create_version(document)
         return document
 
     @staticmethod
     @transaction.atomic
-    def generate_document(*, document_type: str, title: str, fields: dict[str, str], save: bool = True) -> GeneratedDocument:
-        template = DocumentTemplate.objects.get(document_type=document_type, is_active=True)
+    def generate_document(
+        *,
+        document_type: str,
+        title: str,
+        fields: dict[str, str],
+        template_id: int | None = None,
+        branding: dict | None = None,
+        company_logo=None,
+        save: bool = True,
+    ) -> GeneratedDocument:
+        templates = DocumentTemplate.objects.filter(document_type=document_type, is_active=True)
+        template = templates.get(id=template_id) if template_id else templates.order_by("name").first()
+        if template is None:
+            raise DocumentTemplate.DoesNotExist
         required_names = [field["name"] for field in template.required_fields]
         missing = [name for name in required_names if not fields.get(name)]
         if missing:
@@ -65,7 +116,10 @@ class DocumentService:
             document = DocumentService.create_document(
                 title=title,
                 document_type=document_type,
+                template=template,
                 content=content,
+                branding=branding or {},
+                company_logo=company_logo,
                 status=DocumentStatus.GENERATED,
             )
         return GeneratedDocument(title=title, document_type=document_type, content=content, document=document)

@@ -5,14 +5,14 @@ from apps.legal.models import DocumentTemplate, DocumentVersion, LegalDocument
 
 @admin.register(DocumentTemplate)
 class DocumentTemplateAdmin(admin.ModelAdmin):
-    list_display = ("name", "document_type", "is_active", "updated_at")
-    list_filter = ("document_type", "is_active")
+    list_display = ("name", "document_type", "layout_id", "theme", "is_active", "updated_at")
+    list_filter = ("document_type", "theme", "is_active")
     search_fields = ("name", "description")
 
 
 @admin.register(LegalDocument)
 class LegalDocumentAdmin(admin.ModelAdmin):
-    list_display = ("title", "document_type", "status", "created_at", "updated_at")
+    list_display = ("title", "document_type", "template", "status", "created_at", "updated_at")
     list_filter = ("document_type", "status")
     search_fields = ("title", "content")
 

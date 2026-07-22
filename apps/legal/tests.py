@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import tempfile
+from io import BytesIO
 from unittest.mock import patch
 
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.test import override_settings
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -23,9 +28,13 @@ class LegalDocumentApiTests(TestCase):
                 "title": "Acme NDA",
                 "fields": {
                     "party_one": "Acme Inc.",
+                    "party_one_address": "100 Market Street, New York, NY",
                     "party_two": "Beta LLC",
+                    "party_two_address": "200 Lake Road, Boston, MA",
                     "effective_date": "2026-07-20",
+                    "purpose": "evaluating a strategic software integration",
                     "term": "3 years",
+                    "notice_email": "legal@example.com",
                     "governing_law": "New York",
                 },
                 "save": True,
@@ -36,31 +45,59 @@ class LegalDocumentApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(LegalDocument.objects.count(), 1)
         self.assertEqual(DocumentVersion.objects.count(), 1)
+        self.assertIn("pdf_url", response.data)
+
+    def test_generate_document_accepts_multipart_logo_upload(self):
+        logo_buffer = BytesIO()
+        Image.new("RGB", (120, 60), color="white").save(logo_buffer, format="PNG")
+        logo = SimpleUploadedFile("logo.png", logo_buffer.getvalue(), content_type="image/png")
+        template = DocumentTemplate.objects.get(document_type="offer_letter", layout_id="modern_corporate")
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            response = self.client.post(
+                "/api/legal/documents/generate/",
+                {
+                    "document_type": "offer_letter",
+                    "template_id": str(template.id),
+                    "title": "Asha Offer",
+                    "fields": """{"candidate_name":"Asha Rao","candidate_address":"Bengaluru","company_name":"Grovyn Labs","company_address":"Hyderabad","role":"Product Counsel","department":"Legal","reporting_manager":"General Counsel","joining_date":"2026-08-01","work_location":"Hyderabad","compensation":"INR 24,00,000 annual CTC","probation_period":"6 months","notice_period":"60 days","offer_expiry_date":"2026-07-31","governing_law":"India"}""",
+                    "branding": """{"company_name":"Grovyn Labs","email":"legal@grovyn.example"}""",
+                    "save": "true",
+                    "company_logo": logo,
+                },
+                format="multipart",
+            )
+
+            self.assertEqual(response.status_code, 201)
+            document = LegalDocument.objects.get(title="Asha Offer")
+            self.assertTrue(document.company_logo.name.startswith("company_logos/"))
+            self.assertIn("Asha Rao", document.content)
+            self.assertNotIn("governed by the laws", document.content.lower())
+            self.assertTrue(response.data["pdf_url"])
+
+            pdf_response = self.client.get(f"/api/legal/documents/{document.id}/download-pdf/")
+            self.assertEqual(pdf_response.status_code, 200)
+            self.assertEqual(pdf_response["Content-Type"], "application/pdf")
 
     def test_templates_endpoint_returns_default_templates(self):
         response = self.client.get("/api/legal/templates/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["count"], 4)
-        self.assertEqual(
-            {template["name"] for template in response.data["results"]},
-            {
-                "Employment Letter",
-                "Offer Letter",
-                "Mutual Non-Disclosure Agreement",
-                "Service Agreement",
-            },
-        )
+        self.assertEqual(response.data["count"], 55)
+        self.assertIn("layout_id", response.data["results"][0])
+        self.assertIn("color_scheme", response.data["results"][0])
+        self.assertTrue(any(template["name"] == "Offer Letter" for template in response.data["results"]))
 
     def test_seed_command_only_inserts_missing_templates(self):
-        nda = DocumentTemplate.objects.get(document_type="nda")
+        original_count = DocumentTemplate.objects.count()
+        nda = DocumentTemplate.objects.get(document_type="nda", layout_id="modern_corporate")
         nda.name = "Custom NDA"
         nda.save(update_fields=["name"])
 
         call_command("seed_legal_templates")
 
         nda.refresh_from_db()
-        self.assertEqual(DocumentTemplate.objects.count(), 4)
+        self.assertEqual(DocumentTemplate.objects.count(), original_count)
         self.assertEqual(nda.name, "Custom NDA")
 
     def test_seed_helper_recreates_missing_templates_idempotently(self):
@@ -68,8 +105,8 @@ class LegalDocumentApiTests(TestCase):
 
         created_count = seed_default_document_templates()
 
-        self.assertEqual(created_count, 4)
-        self.assertEqual(DocumentTemplate.objects.count(), 4)
+        self.assertEqual(created_count, 55)
+        self.assertEqual(DocumentTemplate.objects.count(), 55)
         self.assertTrue(DocumentTemplate.objects.filter(document_type="nda").exists())
 
     def test_templates_endpoint_allows_vite_dev_origin(self):

@@ -20,14 +20,20 @@ export const API_BASE = `${normalizedApiBaseUrl}/api/legal`;
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
-  headers: { "Content-Type": "application/json" },
   timeout: 45000,
 });
 
 function apiError(error: unknown) {
   if (!axios.isAxiosError(error)) return "Something went wrong.";
-  const data = error.response?.data as { error?: { message?: string }; detail?: string } | undefined;
-  return data?.error?.message ?? data?.detail ?? error.message ?? "Request failed.";
+  const data = error.response?.data as { error?: { message?: unknown }; detail?: unknown } | undefined;
+  const message = data?.error?.message ?? data?.detail;
+  if (typeof message === "string") return message;
+  if (message && typeof message === "object") {
+    return Object.entries(message as Record<string, unknown>)
+      .map(([field, value]) => `${field}: ${Array.isArray(value) ? value.join(", ") : String(value)}`)
+      .join("; ");
+  }
+  return error.message ?? "Request failed.";
 }
 
 apiClient.interceptors.response.use(
@@ -72,7 +78,21 @@ export const legalApi = {
     await apiClient.delete(`documents/${id}/`);
   },
   async generateDocument(payload: GenerateDocumentPayload) {
-    const { data } = await apiClient.post<GeneratedDocumentResponse>("documents/generate/", payload);
+    const hasLogo = Boolean(payload.company_logo);
+    const body = hasLogo
+      ? (() => {
+          const form = new FormData();
+          form.append("document_type", payload.document_type);
+          if (payload.template_id) form.append("template_id", String(payload.template_id));
+          form.append("title", payload.title);
+          form.append("fields", JSON.stringify(payload.fields));
+          form.append("branding", JSON.stringify(payload.branding ?? {}));
+          form.append("save", String(payload.save));
+          if (payload.company_logo) form.append("company_logo", payload.company_logo);
+          return form;
+        })()
+      : payload;
+    const { data } = await apiClient.post<GeneratedDocumentResponse>("documents/generate/", body);
     return data;
   },
   async explainClause(id: number, clause: string) {

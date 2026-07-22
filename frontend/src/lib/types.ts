@@ -6,6 +6,13 @@ export type DocumentTemplate = {
   document_type: string;
   description: string;
   required_fields: TemplateField[];
+  preview_image?: string | null;
+  theme: string;
+  layout_id: string;
+  header_style: string;
+  footer_style: string;
+  color_scheme: Record<string, string>;
+  font: string;
 };
 
 export type DocumentVersion = {
@@ -28,8 +35,21 @@ export type LegalDocumentListItem = {
 };
 
 export type LegalDocument = Omit<LegalDocumentListItem, "version_count"> & {
+  template?: number | null;
   content: string;
+  branding?: Record<string, string>;
+  company_logo?: string | null;
   versions: DocumentVersion[];
+};
+
+export type CompanyBranding = {
+  company_name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  registration_number?: string;
+  gst_number?: string;
 };
 
 export type PaginatedResponse<T> = {
@@ -41,8 +61,11 @@ export type PaginatedResponse<T> = {
 
 export type GenerateDocumentPayload = {
   document_type: string;
+  template_id?: number;
   title: string;
   fields: Record<string, string>;
+  branding?: CompanyBranding;
+  company_logo?: File | null;
   save: boolean;
 };
 
@@ -51,6 +74,7 @@ export type GeneratedDocumentResponse = {
   document_type: string;
   content: string;
   document: LegalDocument | null;
+  pdf_url?: string | null;
 };
 
 export type ExplainClauseResponse = {
